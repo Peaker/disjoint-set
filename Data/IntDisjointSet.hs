@@ -31,7 +31,7 @@ this to be persistent, lookup is stateful and so returns the result
 of the lookup and a new disjoint set.
 
 Additionally, to make sure that path lengths grow logarithmically, we
-maintain the rank of a set. This is a logarithmic upper bound on the 
+maintain the rank of a set. This is a logarithmic upper bound on the
 number of elements in each set. When we compute the union of two sets,
 we make the set with the smaller rank a child of the set with the larger
 rank. When two sets have equal rank, the first set is a child of the second
@@ -59,6 +59,7 @@ module Data.IntDisjointSet (IntDisjointSet,
 import Control.Arrow
 import Control.Monad.State.Strict
 import Control.Monad.Trans.Maybe
+import Data.Functor.Identity (Identity)
 import qualified Data.IntMap as IntMap
 import qualified Data.List as List
 import Data.Maybe
@@ -140,7 +141,9 @@ unionRep !x !y set = flip runState set $ runMaybeT $ do
     then return repx
     else do
       IntDisjointSet count newSet <- get
-      let unify low high updateRank = do
+      let unify :: Int -> Int -> (IntMap.IntMap Node -> IntMap.IntMap Node)
+                -> MaybeT (StateT IntDisjointSet Identity) Int
+          unify low high updateRank = do
             put $! IntDisjointSet (count-1) $ updateRank $
               IntMap.insert low (NodeLink high) newSet
             return high
@@ -177,10 +180,12 @@ in arbitrary order.
 -}
 toList :: IntDisjointSet -> ([(Int, Int)], IntDisjointSet)
 toList set = flip runState set $ do
-               xs <- state elems
-               forM xs $ \x -> do
-                 Just rep <- state $ lookup x
-                 return (x, rep)
+              xs <- state elems
+              forM xs $ \x -> do
+                repMay <- state $ lookup x
+                case repMay of
+                  Just rep -> return (x, rep)
+                  Nothing -> error "impossible: IntDisjointSet lookup failed in toList"
 
 {-|
 Given an association list representing equivalences between elements,
